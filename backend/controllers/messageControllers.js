@@ -3,9 +3,9 @@ const Message = require("../models/messageModel");
 const User = require("../models/userModel");
 const Chat = require("../models/chatModel");
 
-//@description     Get all Messages
-//@route           GET /api/Message/:chatId
-//@access          Protected
+//@description Get all messages for a specific chat
+//@route GET /api/message/:chatId
+//@access Protected
 const allMessages = asyncHandler(async (req, res) => {
   try {
     const messages = await Message.find({ chat: req.params.chatId })
@@ -13,14 +13,14 @@ const allMessages = asyncHandler(async (req, res) => {
       .populate("chat");
     res.json(messages);
   } catch (error) {
-    res.status(400);
-    throw new Error(error.message);
+    res.status(400).json({ message: "Failed to get messages" });
+    console.error("Error fetching messages:", error.message);
   }
 });
 
-//@description     Create New Message
-//@route           POST /api/Message/
-//@access          Protected
+//@description Create a new message
+//@route POST /api/message/
+//@access Protected
 const sendMessage = asyncHandler(async (req, res) => {
   const { content, chatId } = req.body;
 
@@ -29,28 +29,32 @@ const sendMessage = asyncHandler(async (req, res) => {
     return res.sendStatus(400);
   }
 
-  var newMessage = {
+  const newMessage = {
     sender: req.user._id,
     content: content,
     chat: chatId,
   };
 
   try {
-    var message = await Message.create(newMessage);
+    // Create the message
+    const createdMessage = await Message.create(newMessage);
 
-    message = await message.populate("sender", "name pic").execPopulate();
-    message = await message.populate("chat").execPopulate();
-    message = await User.populate(message, {
-      path: "chat.users",
-      select: "name pic email",
-    });
+    // Retrieve the message as a Mongoose document and populate necessary fields
+    const message = await Message.findById(createdMessage._id)
+      .populate("sender", "name pic")
+      .populate("chat")
+      .populate({
+        path: "chat.users",
+        select: "name pic email",
+      });
 
-    await Chat.findByIdAndUpdate(req.body.chatId, { latestMessage: message });
+    // Update the latest message in the chat
+    await Chat.findByIdAndUpdate(chatId, { latestMessage: message });
 
     res.json(message);
   } catch (error) {
-    res.status(400);
-    throw new Error(error.message);
+    res.status(400).json({ message: "Failed to send message" });
+    console.error("Error sending message:", error.message);
   }
 });
 
